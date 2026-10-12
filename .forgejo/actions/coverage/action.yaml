@@ -1,0 +1,47 @@
+name: Generate Coverage Badge
+description: Generate Coverage Badge
+runs:
+  using: composite
+  steps:
+
+      - name: Debug
+        run: ls -la
+
+      - name: Generate badge SVG
+        run: |
+          mkdir -p docs
+          export TOTAL=$(python3 -c "import json; d=json.load(open('coverage.json')); print(round(d['totals']['percent_covered'], 1))")
+          COLOUR="red"
+          if (( $(echo "$TOTAL > 50" | bc -l) )); then COLOUR="yellow"; fi
+          if (( $(echo "$TOTAL > 70" | bc -l) )); then COLOUR="brightgreen"; fi
+
+          echo TOTAL=${TOTAL} > $GITHUB_ENV
+          
+          curl -s "https://img.shields.io/badge/coverage-${TOTAL}%25-${COLOUR}" > docs/coverage.svg
+        
+      - name: Commit badge to repo
+        run: |
+          git config --global user.name "ryan_mcc"
+          git config --global user.email "ryan1328@protonmail.com"
+          
+          # Fetch remote state
+          git fetch origin
+          
+          # Checkout or create branch
+          if git rev-parse --verify _auto-badge-update >/dev/null 2>&1; then
+            git checkout _auto-badge-update
+          else
+            git checkout -b _auto-badge-update
+          fi
+          
+          # Discard any local changes, start fresh from remote
+          git reset --hard origin/_auto-badge-update 2>/dev/null || git reset --hard origin/_auto-badge-update
+          
+          # Create/update badge commit
+          git add docs/coverage.svg
+          if ! git diff-index --quiet HEAD --; then
+            git commit -m "chore: update coverage badge to ${TOTAL}%"
+          fi
+          
+          # Force push (automation branch = safe to overwrite history)
+          git push --force-with-lease --set-upstream origin _auto-badge-update 2>/dev/null || git push --force origin _auto-badge-update

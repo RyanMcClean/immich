@@ -1,0 +1,46 @@
+name: PR Tests
+on: 
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: debian-stable
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.FORGEJO_TOKEN }}
+
+      - name: Install uv
+        uses: https://github.com/astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          activate-environment: true
+
+      - name: Run linting
+        id: linting
+        continue-on-error: true
+        run: uv run --extra dev flake8
+
+      - name: Run tests
+        id: pytest
+        continue-on-error: true
+        run: uv run --extra test pytest --html=./docs/test-report.html --self-contained-html
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: Test Results
+          path: ./docs/test-report.html
+
+      - name: Fail job if tests failed
+        if: steps.pytest.outcome == 'failure'
+        run: |
+          echo Pytest - ${{ steps.pytest.outcome }}
+          exit 1
+
+      - name: Fail job if linting failed
+        if: steps.linting.outcome == 'failure'
+        run: |
+          echo Pytest - ${{ steps.linting.outcome }}
+          exit 1
